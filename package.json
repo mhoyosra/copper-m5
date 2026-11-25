@@ -17,7 +17,10 @@
     "env:check": "node scripts/check-env.mjs",
     "build-passages": "tsx --env-file=.env.local scripts/build-passages.ts",
     "setup-supabase": "node scripts/set-supabase-env.mjs",
-    "check-supabase": "tsx --env-file=.env.local scripts/check-supabase.ts"
+    "check-supabase": "tsx --env-file=.env.local scripts/check-supabase.ts",
+    "eval:seed": "tsx --env-file=.env.local scripts/seed-golden-set.mts",
+    "eval:calibrate": "tsx --env-file=.env.local scripts/calibrate-judge.mts",
+    "eval:run": "tsx --env-file=.env.local scripts/run-eval.mts"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.93",

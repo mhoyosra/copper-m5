@@ -1,0 +1,50 @@
+name: Ask Copper quality gate
+
+# Runs the golden questions through Ask Copper, has an LLM judge grade each
+# answer, records the scores in Langfuse and fails the check when quality drops
+# (see experiments/ask-copper-gate.ts for the bars). The results are also posted
+# as a comment on the pull request.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+# A newer push replaces the run in progress: model calls cost quota.
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    # Secrets are not available to pull requests from forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - uses: langfuse/experiment-action@v1.0.13
+        env:
+          # Read by the app's model calls and the judge (lib/ai/call.ts).
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          JUDGE_MODEL: ${{ vars.JUDGE_MODEL }}
+          LANGFUSE_TRACING_ENVIRONMENT: ci
+        with:
+          langfuse_public_key: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          langfuse_secret_key: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          langfuse_base_url: https://cloud.langfuse.com
+          experiment_path: experiments/ask-copper-gate.ts
+          dataset_name: ask-copper-golden
+          # The repo's own package.json provides the SDK and tsx.
+          should_skip_sdk_installation: "true"
+          github_token: ${{ github.token }}

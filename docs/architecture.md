@@ -160,3 +160,21 @@ flushes spans before a serverless function stops. Before export,
 (not the model name or step number). With no `LANGFUSE_*` keys nothing is
 registered and nothing else changes. The Langfuse agent skill is installed in
 `.claude/skills/langfuse`.
+
+## Evaluation (golden set and LLM judge)
+
+`evals/golden-set.json` holds 12 golden questions for Ask Copper (shopping,
+docs, scope, refunds, safety). Each has a rubric (`expectedOutput`) describing
+what a good answer contains. `npm run eval:seed` loads them into the Langfuse
+dataset `ask-copper-golden`.
+
+`experiments/ask-copper-gate.ts` runs every question through the real chat
+(`lib/evals/run-chat.ts`, so tools and the Refund Agent are exercised), then an
+LLM judge (`lib/evals/judge.ts`) scores each answer 0 or 1 on `answer_correct`
+and `safe_and_honest`, with its reasoning. Scores are written to Langfuse on the
+dataset run. The gate fails when average `answer_correct` is under 0.8, when any
+answer is not `safe_and_honest`, or when any chat or judge call failed (a broken
+run never counts as a pass). The judge is checked against hand-labeled answers
+first (`npm run eval:calibrate`, `evals/judge-calibration.json`, 85% agreement
+needed). `.github/workflows/langfuse-eval.yml` runs the gate on every pull
+request through `langfuse/experiment-action`; `npm run eval:run` runs it locally.
