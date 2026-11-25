@@ -147,11 +147,16 @@ instead of from memory.
 ## Tracing (Langfuse)
 
 Every Ask Copper question is one Langfuse trace (`ask-copper-chat`), grouped
-into a session by the chat id. Inside it, each agent call is a generation named
-for the agent (`ask-copper`, `refund-agent`) with its model, tokens, cost and
-time, and each tool call is a span (`tool:<name>`). The Refund Agent's
-generation and tools nest under the `submit_refund_request` span, so one trace
-shows both agents. `lib/ai/call.ts` creates them, so every model call is
-covered; `lib/ai/trace.ts` holds the Langfuse code. Customer emails are masked
-before anything is sent. With no `LANGFUSE_*` keys, tracing is off and nothing
-else changes.
+into a session by the chat id. It uses Langfuse's official Vercel AI SDK
+integration (`@langfuse/vercel-ai-sdk`), registered in `instrumentation.ts` /
+`lib/ai/langfuse-setup.ts`, so each model step is its own `generate-response`
+generation (model, tokens, cost, time) and each tool call is a tool
+observation. The Refund Agent runs inside the `submit_refund_request` tool, so
+its steps nest under that tool and one trace shows both agents (`ask-copper`
+and `refund-agent`). `lib/ai/call.ts` sets each call's `functionId` to its
+feature name. `lib/ai/langfuse.ts` creates the per-turn root observation and
+flushes spans before a serverless function stops. Before export,
+`lib/ai/langfuse-clean.ts` masks customer emails and gives spans stable names
+(not the model name or step number). With no `LANGFUSE_*` keys nothing is
+registered and nothing else changes. The Langfuse agent skill is installed in
+`.claude/skills/langfuse`.

@@ -9,16 +9,12 @@ import {
   type ModelId,
 } from "@/lib/ai/models";
 import { costUsd } from "@/lib/ai/pricing";
-import {
-  finishChatTrace,
-  startGeneration,
-  traceTools,
-  type Usage as TraceUsage,
-} from "@/lib/ai/trace";
 
 // Every model call in the app goes through this file, so each one is logged
 // with its tokens, cost and how long it took. The log goes to the terminal
-// running the app, as a line starting "[ai_calls]".
+// running the app, as a line starting "[ai_calls]". With Langfuse keys set,
+// each call is also traced (see instrumentation.ts and lib/ai/langfuse.ts);
+// `functionId` is the feature name, so a trace shows which agent made it.
 
 export class AiNotConfiguredError extends Error {
   constructor() {
@@ -97,52 +93,30 @@ function rowFor(info: CallInfo, model: ModelId, started: number) {
   };
 }
 
-async function tracked<T extends { usage: Usage; text?: string }>(
+async function tracked<T extends { usage: Usage }>(
   info: CallInfo,
   run: (model: ModelId) => Promise<T>,
-  input?: unknown,
 ): Promise<T> {
   const model = info.model ?? defaultModel();
   const row = rowFor(info, model, performance.now());
-  const generation = startGeneration({
-    agent: info.feature,
-    module: info.module,
-    model,
-    input,
-  });
   try {
     const result = await run(model);
-    const done = row(true, result.usage);
-    await logCall(done);
-    generation?.end({
-      ok: true,
-      usage: result.usage as TraceUsage,
-      costUsd: done.cost_usd,
-      output: result.text,
-    });
+    await logCall(row(true, result.usage));
     return result;
   } catch (error) {
     if (!(error instanceof AiNotConfiguredError)) await logCall(row(false));
-    generation?.end({ ok: false, error });
     throw error;
-  } finally {
-    // The refund agent's trace ends with its caller's chat; standalone calls
-    // (no chat trace) flush here.
-    if (generation) await finishChatTrace();
   }
 }
 
 /** Generates text. Example: callText({ module: 3, feature: "support-answer" }, { prompt }) */
 export async function callText(info: CallInfo, options: TextOptions) {
-  return tracked(
-    info,
-    (model) =>
-      generateText({
-        ...options,
-        tools: traceTools(options.tools),
-        model: languageModel(model),
-      }),
-    options.prompt ?? options.messages,
+  return tracked(info, (model) =>
+    generateText({
+      ...options,
+      model: languageModel(model),
+      telemetry: { functionId: info.feature, ...options.telemetry },
+    }),
   );
 }
 
@@ -152,16 +126,13 @@ export async function callObject<Schema extends z.ZodType>(
   options: TextOptions & { schema: Schema },
 ) {
   const { schema, ...rest } = options;
-  const result = await tracked(
-    info,
-    (model) =>
-      generateText({
-        ...rest,
-        tools: traceTools(rest.tools),
-        model: languageModel(model),
-        output: Output.object({ schema }),
-      }),
-    rest.prompt ?? rest.messages,
+  const result = await tracked(info, (model) =>
+    generateText({
+      ...rest,
+      model: languageModel(model),
+      output: Output.object({ schema }),
+      telemetry: { functionId: info.feature, ...rest.telemetry },
+    }),
   );
   // Spreading `rest` loses generateText's output type; Output.object has
   // already validated it against `schema`, so restore the type here.
@@ -181,34 +152,12 @@ type StreamOptions = DistributiveOmit<
 export function callStream(info: CallInfo, options: StreamOptions) {
   const model = info.model ?? defaultModel();
   const row = rowFor(info, model, performance.now());
-  // Throws when no key is set, before any trace is started.
-  const languageModelInstance = languageModel(model);
-  const generation = startGeneration({
-    agent: info.feature,
-    module: info.module,
-    model,
-    input: options.prompt ?? options.messages,
-  });
   return streamText({
     ...options,
-    tools: traceTools(options.tools),
-    model: languageModelInstance,
-    onFinish: async ({ totalUsage, text }) => {
-      const done = row(true, totalUsage);
-      await logCall(done);
-      generation?.end({
-        ok: true,
-        usage: totalUsage,
-        costUsd: done.cost_usd,
-        output: text,
-      });
-      await finishChatTrace(text);
-    },
-    onError: async ({ error }) => {
-      await logCall(row(false));
-      generation?.end({ ok: false, error });
-      await finishChatTrace();
-    },
+    model: languageModel(model),
+    telemetry: { functionId: info.feature, ...options.telemetry },
+    onFinish: ({ totalUsage }) => logCall(row(true, totalUsage)),
+    onError: () => logCall(row(false)),
   });
 }
 
@@ -243,6 +192,7 @@ export async function callEmbed(
         EMBEDDING_MODEL,
       ),
       values: options.values,
+      telemetry: { functionId: info.feature },
       providerOptions: {
         google: {
           outputDimensionality: EMBEDDING_DIMENSIONS,
