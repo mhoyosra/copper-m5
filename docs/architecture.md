@@ -143,3 +143,15 @@ instead of from memory.
 **Storage:** `lib/copper/refunds/store.ts` uses the Supabase tables when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set, and an in-memory demo store (seeded with eight fictional orders) otherwise, so the app still runs with no setup. The Supabase store is written but not yet run against a live database.
 
 **Risks and open questions:** The Refund Console is open (no sign-in yet), so it is not safe for real money. Order id plus email stands in for identity, and money returns only to the original payment method. A $50 limit sends every device and annual-plan refund to a person. Return shipping, tax and shipping refunds, and email notices are out of scope.
+
+## Tracing (Langfuse)
+
+Every Ask Copper question is one Langfuse trace (`ask-copper-chat`), grouped
+into a session by the chat id. Inside it, each agent call is a generation named
+for the agent (`ask-copper`, `refund-agent`) with its model, tokens, cost and
+time, and each tool call is a span (`tool:<name>`). The Refund Agent's
+generation and tools nest under the `submit_refund_request` span, so one trace
+shows both agents. `lib/ai/call.ts` creates them, so every model call is
+covered; `lib/ai/trace.ts` holds the Langfuse code. Customer emails are masked
+before anything is sent. With no `LANGFUSE_*` keys, tracing is off and nothing
+else changes.

@@ -7,6 +7,7 @@
 import { stepCountIs } from "ai";
 import { callStream, THOUGHT_SUMMARIES } from "@/lib/ai/call";
 import { createLive, type Live } from "@/lib/ai/live";
+import { withChatTrace } from "@/lib/ai/trace";
 import {
   describeAiError,
   GENERIC_MESSAGE,
@@ -32,7 +33,22 @@ const MAX_STEPS = 5;
 
 const SORRY = GENERIC_MESSAGE;
 
-export async function askCopper({
+export async function askCopper(
+  request: AskCopperRequest,
+): Promise<AskCopperResult> {
+  // One Langfuse trace per question, grouped by chat (a no-op without keys).
+  return withChatTrace(
+    {
+      name: "ask-copper-chat",
+      chatId: request.chatId,
+      input: request.messages.at(-1)?.content,
+      tags: ["ask-copper", request.useTools ? "tools" : "no-tools"],
+    },
+    async () => runAskCopper(request),
+  );
+}
+
+async function runAskCopper({
   messages,
   useTools,
   chatId,

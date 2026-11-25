@@ -34,6 +34,9 @@ They're all optional until a module needs them. Put it in `.env.local` (never co
 | `GOOGLE_GENERATIVE_AI_API_KEY` | All AI calls (`lib/ai/call.ts`)   | [Google AI Studio](https://aistudio.google.com) > Get API key (free, no card)                                          |
 | `NEXT_PUBLIC_SUPABASE_URL`     | Refund orders and cases, Module 4 | [Supabase](https://supabase.com) > your project > Project Settings > API keys (free, no card)                          |
 | `SUPABASE_SERVICE_ROLE_KEY`    | Refund orders and cases, Module 4 | The same page: the secret key. Server only, never in the browser. Add it with `npm run setup-supabase` (hidden prompt) |
+| `LANGFUSE_PUBLIC_KEY`          | Chat tracing (`lib/ai/trace.ts`)  | [Langfuse](https://cloud.langfuse.com) > your project > Settings > API Keys                                            |
+| `LANGFUSE_SECRET_KEY`          | Chat tracing                      | The same page. Server only. Tracing is off until both keys are set                                                     |
+| `LANGFUSE_BASE_URL`            | Chat tracing (optional)           | Defaults to `https://cloud.langfuse.com`; use `https://us.cloud.langfuse.com` for a US project                         |
 
 ## Commands
 
