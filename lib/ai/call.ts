@@ -181,6 +181,8 @@ type StreamOptions = DistributiveOmit<
 export function callStream(info: CallInfo, options: StreamOptions) {
   const model = info.model ?? defaultModel();
   const row = rowFor(info, model, performance.now());
+  // Throws when no key is set, before any trace is started.
+  const languageModelInstance = languageModel(model);
   const generation = startGeneration({
     agent: info.feature,
     module: info.module,
@@ -190,7 +192,7 @@ export function callStream(info: CallInfo, options: StreamOptions) {
   return streamText({
     ...options,
     tools: traceTools(options.tools),
-    model: languageModel(model),
+    model: languageModelInstance,
     onFinish: async ({ totalUsage, text }) => {
       const done = row(true, totalUsage);
       await logCall(done);
