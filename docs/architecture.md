@@ -143,3 +143,20 @@ instead of from memory.
 **Storage:** `lib/copper/refunds/store.ts` uses the Supabase tables when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set, and an in-memory demo store (seeded with eight fictional orders) otherwise, so the app still runs with no setup. The Supabase store is written but not yet run against a live database.
 
 **Risks and open questions:** The Refund Console is open (no sign-in yet), so it is not safe for real money. Order id plus email stands in for identity, and money returns only to the original payment method. A $50 limit sends every device and annual-plan refund to a person. Return shipping, tax and shipping refunds, and email notices are out of scope.
+
+## Tracing (Langfuse)
+
+Every Ask Copper question is one Langfuse trace (`ask-copper-chat`), grouped
+into a session by the chat id. It uses Langfuse's official Vercel AI SDK
+integration (`@langfuse/vercel-ai-sdk`), registered in `instrumentation.ts` /
+`lib/ai/langfuse-setup.ts`, so each model step is its own `generate-response`
+generation (model, tokens, cost, time) and each tool call is a tool
+observation. The Refund Agent runs inside the `submit_refund_request` tool, so
+its steps nest under that tool and one trace shows both agents (`ask-copper`
+and `refund-agent`). `lib/ai/call.ts` sets each call's `functionId` to its
+feature name. `lib/ai/langfuse.ts` creates the per-turn root observation and
+flushes spans before a serverless function stops. Before export,
+`lib/ai/langfuse-clean.ts` masks customer emails and gives spans stable names
+(not the model name or step number). With no `LANGFUSE_*` keys nothing is
+registered and nothing else changes. The Langfuse agent skill is installed in
+`.claude/skills/langfuse`.

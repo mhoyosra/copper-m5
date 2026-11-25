@@ -5,7 +5,9 @@
 // and sends back each step as it happens, so the panel can show Copper
 // thinking and using its tools.
 import { stepCountIs } from "ai";
+import { after } from "next/server";
 import { callStream, THOUGHT_SUMMARIES } from "@/lib/ai/call";
+import { flushTraces, inChatTrace } from "@/lib/ai/langfuse";
 import { createLive, type Live } from "@/lib/ai/live";
 import {
   describeAiError,
@@ -32,11 +34,28 @@ const MAX_STEPS = 5;
 
 const SORRY = GENERIC_MESSAGE;
 
-export async function askCopper({
-  messages,
-  useTools,
-  chatId,
-}: AskCopperRequest): Promise<AskCopperResult> {
+export async function askCopper(
+  request: AskCopperRequest,
+): Promise<AskCopperResult> {
+  // One Langfuse trace per question, grouped into a session by the chat id.
+  // Ask Copper's model steps and tool calls (and the Refund Agent's, when a
+  // refund is requested) are recorded under it. A no-op without Langfuse keys.
+  return inChatTrace(
+    {
+      name: "ask-copper-chat",
+      sessionId: request.chatId,
+      input: request.messages.at(-1)?.content,
+      tags: [request.useTools ? "with-tools" : "no-tools"],
+      metadata: { agent: "ask-copper" },
+    },
+    (root) => runAskCopper(request, root),
+  );
+}
+
+async function runAskCopper(
+  { messages, useTools, chatId }: AskCopperRequest,
+  root: { update(body: { output?: unknown }): { end(): void } },
+): Promise<AskCopperResult> {
   const { live, update, done } = createLive<Progress>();
   const progress: Progress = { steps: [], reply: "", status: "working" };
   // A fresh copy each time, so earlier updates never change underneath the
@@ -68,6 +87,13 @@ export async function askCopper({
       }),
     },
   );
+
+  // Send the trace before a serverless function stops, once the reply is done.
+  try {
+    after(flushTraces);
+  } catch {
+    // Not inside a request (tests, scripts): nothing to wait for.
+  }
 
   // Read the stream in the background, so the panel gets the first update now.
   void (async () => {
@@ -133,6 +159,7 @@ export async function askCopper({
       // Say what went wrong when we can tell (quota used up, service busy).
       if (!progress.reply.trim()) progress.reply = describeAiError(error);
     }
+    root.update({ output: progress.reply }).end();
     done(snapshot());
   })();
 

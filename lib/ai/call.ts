@@ -12,7 +12,9 @@ import { costUsd } from "@/lib/ai/pricing";
 
 // Every model call in the app goes through this file, so each one is logged
 // with its tokens, cost and how long it took. The log goes to the terminal
-// running the app, as a line starting "[ai_calls]".
+// running the app, as a line starting "[ai_calls]". With Langfuse keys set,
+// each call is also traced (see instrumentation.ts and lib/ai/langfuse.ts);
+// `functionId` is the feature name, so a trace shows which agent made it.
 
 export class AiNotConfiguredError extends Error {
   constructor() {
@@ -110,7 +112,11 @@ async function tracked<T extends { usage: Usage }>(
 /** Generates text. Example: callText({ module: 3, feature: "support-answer" }, { prompt }) */
 export async function callText(info: CallInfo, options: TextOptions) {
   return tracked(info, (model) =>
-    generateText({ ...options, model: languageModel(model) }),
+    generateText({
+      ...options,
+      model: languageModel(model),
+      telemetry: { functionId: info.feature, ...options.telemetry },
+    }),
   );
 }
 
@@ -125,6 +131,7 @@ export async function callObject<Schema extends z.ZodType>(
       ...rest,
       model: languageModel(model),
       output: Output.object({ schema }),
+      telemetry: { functionId: info.feature, ...rest.telemetry },
     }),
   );
   // Spreading `rest` loses generateText's output type; Output.object has
@@ -148,6 +155,7 @@ export function callStream(info: CallInfo, options: StreamOptions) {
   return streamText({
     ...options,
     model: languageModel(model),
+    telemetry: { functionId: info.feature, ...options.telemetry },
     onFinish: ({ totalUsage }) => logCall(row(true, totalUsage)),
     onError: () => logCall(row(false)),
   });
@@ -184,6 +192,7 @@ export async function callEmbed(
         EMBEDDING_MODEL,
       ),
       values: options.values,
+      telemetry: { functionId: info.feature },
       providerOptions: {
         google: {
           outputDimensionality: EMBEDDING_DIMENSIONS,
