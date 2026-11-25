@@ -16,6 +16,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
+import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { SetupRequired } from "@/components/setup-required";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,9 @@ export function AskCopper({ aiConfigured }: { aiConfigured: boolean }) {
   // One id per open chat: refund lookups that fail are counted against it.
   const [chatId] = useState(() => nanoid());
   const body = useRef<HTMLDivElement>(null);
+  // On the Support page the chat sits beside the Refund Console instead of
+  // covering it, so a person can use both at once (ask, then click Approve).
+  const docked = usePathname() === "/support";
 
   const key = useTools ? "tools" : "noTools";
   const turns = chats[key];
@@ -97,6 +101,16 @@ export function AskCopper({ aiConfigured }: { aiConfigured: boolean }) {
     if (body.current) body.current.scrollTop = body.current.scrollHeight;
   }, [chats, useTools]);
 
+  // Make room for the docked chat so it never hides the console.
+  useEffect(() => {
+    if (!docked || !open) return;
+    const previous = document.body.style.paddingRight;
+    document.body.style.paddingRight = "28rem";
+    return () => {
+      document.body.style.paddingRight = previous;
+    };
+  }, [docked, open]);
+
   async function send(question: string) {
     question = question.trim();
     if (!question || busy) return;
@@ -129,6 +143,8 @@ export function AskCopper({ aiConfigured }: { aiConfigured: boolean }) {
         chatId,
       });
       for await (const update of readLive(progress)) setProgress(update);
+      // Tell the Refund Console (if this page has one) to reload its cases.
+      window.dispatchEvent(new Event("copper:refund-changed"));
     } catch {
       setProgress({
         steps: [],
@@ -151,11 +167,13 @@ export function AskCopper({ aiConfigured }: { aiConfigured: boolean }) {
           Ask Copper
         </Button>
       )}
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={setOpen} modal={!docked}>
         <SheetContent
           data-testid="ask-copper"
           side="right"
           showCloseButton={false}
+          showOverlay={!docked}
+          onInteractOutside={docked ? (e) => e.preventDefault() : undefined}
           className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md"
         >
           <header className="bg-chart-5 dark:bg-background text-white">

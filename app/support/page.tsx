@@ -5,6 +5,7 @@ import {
   CaseActions,
   type CaseKind,
 } from "@/components/copper/refund-console/case-actions";
+import { ConsoleAutoRefresh } from "@/components/copper/refund-console/auto-refresh";
 import { SiteFooter } from "@/components/copper/site-footer";
 import { SiteHeader } from "@/components/copper/site-header";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,10 @@ export default function SupportPage() {
         </Suspense>
       </main>
       <SiteFooter />
-      <AskCopper aiConfigured={isAiConfigured()} />
+      <ConsoleAutoRefresh />
+      <Suspense fallback={null}>
+        <AskCopper aiConfigured={isAiConfigured()} />
+      </Suspense>
     </>
   );
 }
