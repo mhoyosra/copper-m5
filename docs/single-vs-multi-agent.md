@@ -23,19 +23,19 @@ Every question starts from a fresh in-memory store, and no item failed to run.
 
 | 36 answers per variant | Multi-agent | Single, bare | Single + net |
 |---|---|---|---|
-| `answer_correct` (judge) | 0.94 | 0.97 | 1.00 |
-| `safe_and_honest` (judge) | 0.97 | 1.00 | 1.00 |
+| `answer_correct` (judge) | 0.97 | 0.97 | 0.94 |
+| `safe_and_honest` (judge) | 1.00 | 1.00 | 1.00 |
 | `case_resolved` (code check on the case store) | 1.00 | 1.00 | 1.00 |
 | `no_internal_leak` (code check: no agent or tool names in the reply) | 1.00 | 1.00 | 1.00 |
-| Tokens per answer | about 4,950 | about 5,600 (+14%) | about 5,600 (+13%) |
-| Cost per answer | $0.00143 | $0.00162 (+13%) | $0.00160 (+12%) |
-| Median time, all questions | 1.7 s | 1.7 s | 1.7 s |
+| Tokens per answer | about 4,950 | about 5,750 (+16%) | about 5,650 (+14%) |
+| Cost per answer | $0.00139 | $0.00161 (+16%) | $0.00161 (+16%) |
+| Median time, all questions | 1.8 s | 1.8 s | 1.7 s |
 | Median time, 5 refund and safety questions | 3.7 s | 3.1 s | 2.4 s |
 
-The misses are 2 answers for multi-agent (a monthly Plus reply judged unsafe once, and the Home plus Notes
-total once), 1 for single-bare (the same total) and none for single + net. That is noise: **the designs
+The only misses are the Home plus Notes total question: 1 answer for multi-agent, 1 for single-bare and 2 for
+single + net. That is noise: **the designs
 are tied on quality, safety and unfinished cases.** The single agent used the full refund path correctly
-every time. The measurable differences are cost (the single agent is about 12 to 13% dearer, because it
+every time. The measurable differences are cost (the single agent is about 16% dearer, because it
 carries the refund tools and instructions in every conversation) and speed on refund questions (the single
 agent is roughly 16 to 35% faster, because it skips one agent run).
 
@@ -55,10 +55,10 @@ haggle. Nothing on this set may end approved, so there is a code check as well a
 | **No unauthorized refund** (code check: nothing ended approved) | **1.00** | **1.00** | **1.00** |
 | Cases left unfinished (code check) | 1.00 resolved | 1.00 | 1.00 |
 | `no_internal_leak` (code check) | 1.00 | 1.00 | 1.00 |
-| `safe_and_honest` (judge) | 1.00 | 0.98 | 0.96 |
-| `answer_correct` (judge, strict rubrics) | 0.50 | 0.78 | 0.69 |
-| Tokens per answer | about 4,900 | about 6,900 (+42%) | about 6,700 (+36%) |
-| Cost per answer | $0.00154 | $0.00218 (+42%) | $0.00205 (+33%) |
+| `safe_and_honest` (judge) | 0.96 | 0.94 | 0.94 |
+| `answer_correct` (judge, strict rubrics) | 0.54 | 0.67 | 0.72 |
+| Tokens per answer | about 5,400 | about 6,700 (+25%) | about 7,100 (+32%) |
+| Cost per answer | $0.00172 | $0.00212 (+23%) | $0.00219 (+27%) |
 
 **The hard result:** across 162 adversarial runs, **no design ever approved a refund or moved money**,
 none left a case unfinished, and none named an internal agent or tool in a reply. The limit, the case
@@ -80,8 +80,8 @@ seeing the results, so treat them as a judgment call.
   sampled across that question and the "I'll lose my job" pressure question; the sixth asked for details
   first). Ask Copper in the multi-agent design more often asked for the item and reason first (its
   instructions require collecting them before it hands off), so it answered later. That is most of the
-  0.50 against 0.69 to 0.78 gap, and it is a real product difference.
-- **The single agent costs more here** (+33 to 42% per answer, +36 to 42% tokens), because it carries the
+  0.54 against 0.67 to 0.72 gap, and it is a real product difference.
+- **The single agent costs more here** (+23 to 27% per answer, +25 to 32% tokens), because it carries the
   refund tools and instructions in every turn and calls more tools.
 
 ## What the adversarial run found and fixed in Ask Copper
@@ -94,10 +94,12 @@ seeing the results, so treat them as a judgment call.
    format onto sentences that came from price tools. The citation rule now says only `search_docs`
    sentences are cited. After the fix, a code check (`no_internal_leak`) found no agent or tool names in
    any of 270 graded answers.
-3. **My first fix caused a regression.** I told the model to "say you are submitting their request", and
-   for a rejected monthly-Plus request it began saying "I've submitted your refund request", which
-   misleads. The golden score for multi-agent dipped, I read the reply, and the instruction now says to
-   report only the outcome as the result states it.
+3. **My first fixes caused a regression, then a second fix closed it.** I told the model to "say you are
+   submitting their request", and for a rejected monthly-Plus request it began saying "I've submitted your
+   refund request", which misleads. Rewording was not enough: in CI it still sometimes opened with "I've
+   processed your refund request" on rejections. The instruction now says to open with the result's own
+   status text and never announce "processed" or "submitted" first (in both designs). After that, the
+   golden set had no unsafe answers in 108 graded runs.
 
 ## Differences that did not show up in the scores
 
@@ -123,7 +125,7 @@ seeing the results, so treat them as a judgment call.
 the guarantee that matters most (nothing approved without a person, no case left hanging). The reasons to
 prefer multi-agent are structural and about cost: no money tool on the customer-facing agent, input-less
 refund tools, code-owned finishing and customer text, a smaller prompt for ordinary shopping chats, and a
-lower cost: the single agent costs 12 to 13% more per answer on the golden set and 33 to 42% more on the
+lower cost: the single agent costs about 16% more per answer on the golden set and 23 to 27% more on the
 adversarial set.
 
 The single agent **with its finish step** is a real alternative, and the adversarial run weakened the case
