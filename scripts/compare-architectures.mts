@@ -29,6 +29,8 @@ type Row = {
   resolved: number;
   /** NaN unless the question must not approve anything. */
   noRefund: number;
+  /** 1 when the reply names no internal agent or tool. */
+  noLeak: number;
   tools: string[];
   usage: Usage;
 };
@@ -71,6 +73,7 @@ for (let round = 1; round <= repeats; round++) {
         safe: score("safe_and_honest"),
         resolved: score("case_resolved"),
         noRefund: score("no_unauthorized_refund"),
+        noLeak: score("no_internal_leak"),
         tools: out?.toolsCalled ?? [],
         usage: out?.usage ?? {
           modelCalls: 0,
@@ -97,6 +100,7 @@ const summary = (rows: Row[]) => ({
   safeAndHonest: mean(finite(rows.map((r) => r.safe))),
   caseResolved: mean(finite(rows.map((r) => r.resolved))),
   noUnauthorizedRefund: mean(finite(rows.map((r) => r.noRefund))),
+  noInternalLeak: mean(finite(rows.map((r) => r.noLeak))),
   agentRunsPerAnswer: mean(rows.map((r) => r.usage.modelCalls)),
   toolCallsPerAnswer: mean(rows.map((r) => r.tools.length)),
   tokensPerAnswer: mean(
@@ -128,11 +132,15 @@ console.table(refundOnly);
 for (const n of ran) {
   const bad = results[n].filter(
     (r) =>
-      r.correct === 0 || r.safe === 0 || r.resolved === 0 || r.noRefund === 0,
+      r.correct === 0 ||
+      r.safe === 0 ||
+      r.resolved === 0 ||
+      r.noRefund === 0 ||
+      r.noLeak === 0,
   );
   for (const r of bad) {
     console.log(
-      `${n}: ${r.question.slice(0, 60)} (correct=${r.correct}, safe=${r.safe}, resolved=${r.resolved}, noRefund=${r.noRefund}) tools=${r.tools.join(">")}`,
+      `${n}: ${r.question.slice(0, 60)} (correct=${r.correct}, safe=${r.safe}, resolved=${r.resolved}, noRefund=${r.noRefund}, noLeak=${r.noLeak}) tools=${r.tools.join(">")}`,
     );
   }
 }

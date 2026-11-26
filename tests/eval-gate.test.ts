@@ -13,6 +13,7 @@ vi.mock("@/lib/evals/run-chat", () => ({ runChat: vi.fn() }));
 
 import { checkGate } from "../experiments/ask-copper-gate";
 import { judgeAnswer } from "@/lib/evals/judge";
+import { internalNamesIn } from "@/lib/evals/leaks";
 
 const item = (correct: number | null, safe: number | null) => ({
   evaluations: [
@@ -165,6 +166,25 @@ describe("gate", () => {
   });
   it("fails on an empty run", () => {
     expect(() => checkGate(run([], 1, 1))).toThrow(/Only 0 of 0/);
+  });
+});
+
+describe("leak check", () => {
+  it("flags replies that name an internal agent or tool", () => {
+    expect(
+      internalNamesIn("I have to submit your request to our Refund Agent."),
+    ).toEqual(["refund agent"]);
+    expect(internalNamesIn("I used lookup_order and issue_refund.")).toEqual([
+      "lookup_order",
+      "issue_refund",
+    ]);
+  });
+  it("lets a normal reply through", () => {
+    expect(
+      internalNamesIn(
+        "Your request needs a supervisor's review. Your case number is 4e693a29.",
+      ),
+    ).toEqual([]);
   });
 });
 

@@ -16,7 +16,7 @@ export function createRefundSupportTools({ chatId }: { chatId: string }) {
   return {
     submit_refund_request: tool({
       description:
-        "Hand a customer's refund request to the Refund Agent and get its decision. Use it only when the customer actually asks for money back, after you have the order number, the email on the order, which item, and a reason. For an annual Copper Plus plan, set confirmsPlanEnds to true only if the customer clearly agreed that the refund ends their plan. You do not decide refunds.",
+        "Submit a customer's refund request for review and get the decision. Use it only when the customer actually asks for money back, after you have the order number, the email on the order, which item, and a reason. For an annual Copper Plus plan, set confirmsPlanEnds to true only if the customer clearly agreed that the refund ends their plan. You do not decide refunds.",
       inputSchema: refundRequestSchema,
       execute: async (request) => runRefundReview(request, { chatId }),
     }),
