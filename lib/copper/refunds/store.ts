@@ -401,3 +401,14 @@ export function getStore(): RefundStore {
   globalForStore.__refundStore ??= createMemoryStore();
   return globalForStore.__refundStore;
 }
+
+/**
+ * Starts the demo store over with the seed orders and no cases. Only the
+ * in-memory store can be reset: with Supabase configured this does nothing and
+ * returns false, so an eval can never touch real cases.
+ */
+export function resetDemoStore(): boolean {
+  if (isSupabaseAdminConfigured()) return false;
+  globalForStore.__refundStore = createMemoryStore();
+  return true;
+}

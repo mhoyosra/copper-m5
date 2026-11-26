@@ -187,5 +187,6 @@ one support agent with every tool and no hand-off
 (`lib/copper/refunds/single-agent-tools.ts`,
 `lib/copper/assistant/single-agent-instructions.ts`). `npm run eval:compare`
 runs the golden set and judge against both, and `docs/single-vs-multi-agent.md`
-has the results and the recommendation (ship multi-agent; the single agent needs
-its fail-closed finish step, `ASK_COPPER_SAFETY_NET`).
+has the results and the recommendation (ship multi-agent, moderate confidence; the
+evals show the designs tied on quality and safety, the single agent costing about
+10% more).

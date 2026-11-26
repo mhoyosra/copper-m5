@@ -1,47 +1,93 @@
 # Single agent or multi-agent? (Module 4, Part 4)
 
-_Fictional company, educational use. Numbers are from `evals/results/two-way-comparison.json`._
+_Fictional company, educational use. Numbers are from `evals/results/architecture-comparison.json`
+(`npm run eval:compare`)._
 
-## The two designs
+## The designs
 
 | | **Multi-agent** (what ships) | **Single agent** (built for this comparison) |
 |---|---|---|
 | Who talks to the customer | Ask Copper only | One support agent |
-| Refund tools | Ask Copper has `submit_refund_request`; the **Refund Agent** (separate prompt, 6-step cap) has `lookup_order`, `check_refund_eligibility`, `issue_refund`, `escalate_to_supervisor` | The same four tools on the one agent, plus Ask Copper's tools and `get_refund_status`. No hand-off |
+| Refund tools | Ask Copper has `submit_refund_request`; the **Refund Agent** (own prompt, 6-step cap) has `lookup_order`, `check_refund_eligibility`, `issue_refund`, `escalate_to_supervisor` | The same four tools on the one agent, plus Ask Copper's tools and `get_refund_status`. No hand-off |
 | Who supplies the request fields (item, reason, confirmation) | The code holds the request; the Refund Agent's tools take **no input** | The model fills them in when it calls `check_refund_eligibility` |
-| Who finishes the job | Code (`finishReview`): fills skipped steps, escalates anything unfinished | The model, unless the optional safety net is on |
-| What the customer reads | A code template (`statusText`) wrapped around a validated explanation | The model's own words, built from the tool results |
+| Who finishes the job | Code (`finishReview`): fills skipped steps, escalates anything unfinished | The model, plus an optional fail-closed finish step (`ASK_COPPER_SAFETY_NET`, on by default) |
+| What the customer reads | A code template (`statusText`) around a validated explanation | The model's own words, built from tool results that include `statusText` |
 
-Both designs share the same rules engine, case records, limits and console. Switch with `ASK_COPPER_ARCH=single` (server-side only). Both are graded by the same golden set and judge: `npm run eval:compare`.
+Both designs share the rules engine, case records, limits, console, golden set and judge. Switch with
+`ASK_COPPER_ARCH=single` (server-side only). Three variants were graded: **multi**, **single-bare**
+(no finish step) and **single-net** (with it).
 
-## What the evals showed (12 questions x 2 rounds, `gemini-3.1-flash-lite`)
+## Results: 12 golden questions x 3 rounds each, `gemini-3.1-flash-lite` for chat and judge
 
-| | Multi-agent | Single agent (no safety net) |
-|---|---|---|
-| `answer_correct` | 0.96 (23/24) | 0.88 (21/24) |
-| `safe_and_honest` | 0.96 (23/24) | 1.00 (24/24) |
-| Refund and safety questions only: correct / safe | 0.90 / 0.90 | 0.70 / 1.00 |
-| Tool calls per answer | 0.83 | 1.12 |
-| Tokens per answer | about 4,800 | about 5,400 |
-| Cost per answer | $0.00144 | $0.00153 |
-| Median time | 4.0 s | 2.3 s |
+Every question starts from a fresh in-memory store, and no item failed to run.
 
-**Read these with care.** 24 answers per design is small, the judge is a model, and the misses are 1 and 3 answers. The cost and token gaps (about 6 to 12%) are real but small; time is dominated by rate-limit pauses. On this data **neither design is clearly better on average answer quality.**
+| 36 answers per variant | Multi-agent | Single, bare | Single + net |
+|---|---|---|---|
+| `answer_correct` (judge) | 0.97 | 0.97 | 1.00 |
+| `safe_and_honest` (judge) | 1.00 | 1.00 | 1.00 |
+| `case_resolved` (code check on the case store) | 1.00 | 1.00 | 1.00 |
+| Tokens per answer | about 4,800 | about 5,600 (+16%) | about 5,700 (+19%) |
+| Cost per answer | $0.00146 | $0.00160 (+10%) | $0.00164 (+12%) |
+| Median time, all questions | 1.8 s | 1.8 s | 1.9 s |
+| Median time, 5 refund and safety questions | 4.1 s | 2.6 s | 2.8 s |
 
-## What mattered more than the averages
+The one miss for multi-agent and for single-bare was the same shopping question (the Home plus Notes
+total); single + net got it right. That is one answer in 36 and is noise.
 
-1. **The single agent skipped a step the customer could not see.** For the $149 Copper Home refund (the one case that needs a final `escalate_to_supervisor`), the single agent stopped after `check_refund_eligibility` in 2 of the 3 runs I observed. It still told the customer "a supervisor will review this", but the case stayed in `reviewing`, so **nobody was asked to review it**. The multi-agent design cannot do this: `finishReview` escalates any unfinished case in code. The LLM judge scored these answers as fine, because it reads text and cannot see case state. That is why the gate now also has an objective `case_resolved` check read from the case store.
-2. **A new agent identity failed open.** The first version of the single agent used a new actor name, `support-agent`. `issueRefund` limited only the literal name `refund-agent` to auto-approved cases, so the new agent could have approved a $149 refund with no person involved. A test caught it before it ran; the guard now reads "anyone but the console". With more agents, permissions written as an allow-list of names are the risky kind.
-3. **The model controls more in the single design.** It chooses the item, reason and confirmation that the rules run on. In the multi-agent design the Refund Agent cannot change them. Code still decides eligibility and amounts in both designs, so this widens the model's influence, not its authority.
+**What the evals show:** on these 12 questions the designs are tied on quality, safety and unfinished
+cases. The single agent used the full refund path correctly every time (it called
+`escalate_to_supervisor` in 3 of 3 runs, so the safety net never had work to do). The measurable
+differences are cost and speed: the single agent costs about 10% more per answer, because it carries the
+refund tools and instructions in every conversation, including shopping questions, and it is about 35%
+faster on refund questions, because it skips one agent run.
+
+**What the evals cannot show:** 36 answers and 12 questions cannot separate designs that are both near
+the ceiling. The golden set has only one injection attempt and one limit-leak question, and neither
+design failed either. These results say nothing about rare failures, which is where the designs differ.
+
+## Differences that did not show up in the scores
+
+1. **A new agent identity failed open (found by a test, now fixed).** The first single agent used a new
+   actor name, `support-agent`. `issueRefund` limited only the literal name `refund-agent` to
+   auto-approved cases, so the new agent could have approved a $149 refund with no person involved. The
+   guard now reads "anyone but the console". Permissions written as an allow-list of names fail open
+   when you add agents.
+2. **The model controls more in the single design.** It chooses the item, reason and confirmation that
+   the rules run on; in the multi-agent design the Refund Agent cannot change them. Code still decides
+   eligibility and amounts in both, so this widens the model's influence, not its authority.
+3. **Refund tools sit in every conversation.** In the single design a shopping chat, and any injected
+   instruction in it, can reach the refund tools. In the multi-agent design the customer-facing agent has
+   no money tool at all.
+4. **Fail-closed finishing is code in one design and a model's habit in the other.** The multi-agent
+   wrapper escalates an unfinished case no matter what the model does. The single agent needs the added
+   finish step to match, and my evals only showed it unneeded because the model happened to do every
+   step.
 
 ## What I would ship
 
-**Ship the multi-agent design**, for control reasons rather than quality ones. It costs about the same and answers about as well on this data, and it gives a customer-facing agent that has no money tool, tools that cannot be given a different order or amount, and a code-owned finish. Those structural guarantees are why it held up when the model skipped a step.
+**Multi-agent, with moderate confidence.** The scores do not favor it. The reasons are cost (about 10%
+cheaper per answer here) and structure: no money tool on the customer-facing agent, input-less refund
+tools, a code-owned finish and customer text, and a smaller prompt for ordinary shopping chats.
 
-The simpler single agent is a reasonable alternative **if it keeps the fail-closed finish step** (`createSingleAgentRefund().finish`, on by default; `ASK_COPPER_SAFETY_NET=off` removes it for measurement). Most of the multi-agent design's advantage here came from code that finishes the job, not from having two prompts. Switch only after a larger run shows the single agent with the net matching on `case_resolved`, `safe_and_honest` and `answer_correct`.
+The single agent **with its finish step** is a reasonable, simpler alternative. It is faster on refunds
+and has one prompt to maintain. Switch only if you also add adversarial evals (see below) and the single
+agent still matches on `safe_and_honest` and `case_resolved`, and if its roughly 10% extra cost and its
+wider tool exposure are acceptable.
 
-## Not yet measured
+**What would change this answer:** a larger adversarial golden set where one design leaks or complies,
+a cost target that makes the 10% matter, or a product need for faster refund replies that outweighs the
+structural controls.
 
-- **Single agent with the safety net.** `npm run eval:compare` now runs three variants (multi, single without the net, single with it) but the free Gemini quota ran out before it could finish, so there is no result for the net yet.
-- **More runs.** Use `EVAL_REPEATS=3` or more and a stronger model before trusting a difference of a few answers.
-- **Why the single agent's round-2 refund answers were marked incorrect.** Its tool calls looked right and the replies I re-ran by hand were judged correct, so treat those three misses as run-to-run variance until a larger run says otherwise.
+## Next steps to settle it
+
+- Add 15 to 20 adversarial questions (injection aimed at `issue_refund`, claims of staff, wrong-email
+  probes, cases that tempt a skipped step) and run `EVAL_REPEATS=5`.
+- Try a weaker model, since a stronger model hides process mistakes.
+
+## Correction (how this write-up changed)
+
+An earlier draft said the single agent skipped `escalate_to_supervisor` in 2 of 3 runs and left cases
+unqueued. That was wrong. The eval harness shared one in-memory store across runs, so after the first
+refund request later runs got "already open" back and never took the full path; that also made every
+variant look bad in rounds 2 and 3. The harness now resets the store before each question
+(`resetDemoStore`, memory store only). All numbers above come from the corrected run.

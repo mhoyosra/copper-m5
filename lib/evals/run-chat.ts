@@ -1,7 +1,7 @@
 import { watchCalls } from "@/lib/ai/call";
 import { askCopper } from "@/lib/copper/assistant/ask";
 import type { ChatMessage } from "@/lib/copper/assistant/ask";
-import { getStore } from "@/lib/copper/refunds/store";
+import { getStore, resetDemoStore } from "@/lib/copper/refunds/store";
 import { toolCallsOf } from "@/lib/copper/assistant/progress";
 
 /** Model calls made while answering one question. */
@@ -54,6 +54,15 @@ export async function runChat(
     usage.outputTokens += add(row.output_tokens);
     usage.costUsd += add(row.cost_usd);
   });
+  // Every question starts from the seed orders and no cases. Without this, a
+  // refund asked in an earlier run is "already open" and later runs never take
+  // the full path, which makes the scores depend on run order. Questions run
+  // one at a time, so resetting here is safe.
+  if (!resetDemoStore()) {
+    throw new Error(
+      "Evals need the in-memory refund store: unset SUPABASE_SERVICE_ROLE_KEY so they cannot touch real cases.",
+    );
+  }
   const { progress } = await askCopper({ messages, useTools: true, chatId });
   let chunk = await progress;
   let last = chunk.value;
