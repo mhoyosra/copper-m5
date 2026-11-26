@@ -1,6 +1,5 @@
-import { registerTelemetry } from "ai";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
-import { LangfuseVercelAiSdkIntegration } from "@langfuse/vercel-ai-sdk";
+import { registerAiTracing } from "@/lib/ai/langfuse-integration";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { CleaningProcessor, maskEmails } from "@/lib/ai/langfuse-clean";
@@ -31,5 +30,5 @@ if (!globalThis.__langfuseSpanProcessor) {
   );
   globalThis.__langfuseSpanProcessor = processor;
   new NodeSDK({ spanProcessors: [processor] }).start();
-  registerTelemetry(new LangfuseVercelAiSdkIntegration());
+  registerAiTracing();
 }
