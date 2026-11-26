@@ -13,10 +13,13 @@ import {
   describeAiError,
   GENERIC_MESSAGE,
 } from "@/lib/copper/assistant/errors";
+import { architecture } from "@/lib/copper/assistant/architecture";
 import { COPPER_INSTRUCTIONS } from "@/lib/copper/assistant/instructions";
 import type { Progress, ToolStep } from "@/lib/copper/assistant/progress";
 import { copperTools } from "@/lib/copper/assistant/tools";
+import { createSingleAgentRefund } from "@/lib/copper/refunds/single-agent-tools";
 import { createRefundSupportTools } from "@/lib/copper/refunds/support-tools";
+import { SINGLE_AGENT_INSTRUCTIONS } from "@/lib/copper/assistant/single-agent-instructions";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -31,6 +34,8 @@ export type AskCopperResult = { progress: Live<Progress> };
 
 /** At most this many model steps (tool calls plus the reply) per question. */
 const MAX_STEPS = 5;
+/** The single agent runs the refund steps itself, so it gets more steps. */
+const SINGLE_MAX_STEPS = 8;
 
 const SORRY = GENERIC_MESSAGE;
 
@@ -46,7 +51,7 @@ export async function askCopper(
       sessionId: request.chatId,
       input: request.messages.at(-1)?.content,
       tags: [request.useTools ? "with-tools" : "no-tools"],
-      metadata: { agent: "ask-copper" },
+      metadata: { agent: "ask-copper", architecture: architecture() },
     },
     (root) => runAskCopper(request, root),
   );
@@ -71,19 +76,37 @@ async function runAskCopper(
 
   // Without tools, send no instructions either: "always use your tools" with
   // no tools makes the model answer with nothing.
+  const single = architecture() === "single";
+  const chat = chatId ?? "anonymous";
+  const singleRefund = single
+    ? createSingleAgentRefund({ chatId: chat })
+    : null;
   const result = callStream(
-    { module: 2, feature: "ask-copper" },
+    {
+      module: single ? 4 : 2,
+      feature: single ? "support-agent" : "ask-copper",
+    },
     {
       messages,
       providerOptions: THOUGHT_SUMMARIES,
       ...(useTools && {
-        instructions: COPPER_INSTRUCTIONS,
-        // Ask Copper's own tools, plus the two refund tools from Module 4.
-        tools: {
-          ...copperTools,
-          ...createRefundSupportTools({ chatId: chatId ?? "anonymous" }),
-        },
-        stopWhen: stepCountIs(MAX_STEPS),
+        instructions: single ? SINGLE_AGENT_INSTRUCTIONS : COPPER_INSTRUCTIONS,
+        tools: single
+          ? {
+              // One agent, every tool, no hand-off: Ask Copper's tools, the
+              // refund status lookup, and the four refund steps themselves.
+              ...copperTools,
+              get_refund_status: createRefundSupportTools({ chatId: chat })
+                .get_refund_status,
+              ...singleRefund!.tools,
+            }
+          : {
+              // Ask Copper's own tools, plus the two refund tools from
+              // Module 4 (the request is handed to the Refund Agent).
+              ...copperTools,
+              ...createRefundSupportTools({ chatId: chat }),
+            },
+        stopWhen: stepCountIs(single ? SINGLE_MAX_STEPS : MAX_STEPS),
       }),
     },
   );
@@ -158,6 +181,13 @@ async function runAskCopper(
       progress.status = "error";
       // Say what went wrong when we can tell (quota used up, service busy).
       if (!progress.reply.trim()) progress.reply = describeAiError(error);
+    }
+    // The single agent has no wrapper around it, so close any refund case it
+    // left unfinished (see single-agent-tools.ts).
+    try {
+      await singleRefund?.finish();
+    } catch {
+      // The chat already has its answer; the case stays visible as "reviewing".
     }
     root.update({ output: progress.reply }).end();
     done(snapshot());

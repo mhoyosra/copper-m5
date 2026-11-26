@@ -1,3 +1,4 @@
+import type { Actor } from "@/lib/copper/refunds/actor";
 // Where orders, cases and the event log are kept. One interface, two
 // implementations: the Supabase tables (production) and an in-memory copy
 // seeded with demo orders (tests, and a local app with no Supabase set up).
@@ -40,7 +41,7 @@ export interface RefundStore {
   applyRefund(args: {
     caseId: string;
     from: CaseStatus[];
-    decidedBy: "refund-agent" | "console";
+    decidedBy: Actor;
   }): Promise<RefundCase | null>;
   addEvent(e: CaseEvent): Promise<void>;
   events(caseId: string): Promise<CaseEvent[]>;
@@ -399,4 +400,15 @@ export function getStore(): RefundStore {
   if (isSupabaseAdminConfigured()) return createSupabaseStore();
   globalForStore.__refundStore ??= createMemoryStore();
   return globalForStore.__refundStore;
+}
+
+/**
+ * Starts the demo store over with the seed orders and no cases. Only the
+ * in-memory store can be reset: with Supabase configured this does nothing and
+ * returns false, so an eval can never touch real cases.
+ */
+export function resetDemoStore(): boolean {
+  if (isSupabaseAdminConfigured()) return false;
+  globalForStore.__refundStore = createMemoryStore();
+  return true;
 }

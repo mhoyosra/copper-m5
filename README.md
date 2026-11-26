@@ -51,6 +51,7 @@ They're all optional until a module needs them. Put it in `.env.local` (never co
 | `npm run eval:seed`                  | Load the golden questions into Langfuse              |
 | `npm run eval:calibrate`             | Check the LLM judge against hand-labeled answers     |
 | `npm run eval:run`                   | Run the Ask Copper quality gate (scores to Langfuse) |
+| `npm run eval:compare`               | Compare single vs multi-agent on the golden set      |
 
 ## AI coding agents
 

@@ -6,16 +6,17 @@ import { stepCountIs } from "ai";
 import { callText, isAiConfigured } from "@/lib/ai/call";
 import { needsInfoDecision } from "@/lib/copper/refunds/decision";
 import { REFUND_INSTRUCTIONS } from "@/lib/copper/refunds/instructions";
-import { getPolicy } from "@/lib/copper/refunds/policy";
-import { finishReview, newContext } from "@/lib/copper/refunds/review";
+import {
+  allowSubmission,
+  finishReview,
+  newContext,
+} from "@/lib/copper/refunds/review";
 import { getStore, type RefundStore } from "@/lib/copper/refunds/store";
 import { createRefundTools } from "@/lib/copper/refunds/tools";
 import type { RefundDecision, RefundRequest } from "@/lib/copper/refunds/types";
 
 /** At most this many model steps per request (tool calls plus the reply). */
 export const MAX_REFUND_STEPS = 6;
-
-const DAY = 86_400_000;
 
 export async function runRefundReview(
   request: RefundRequest,
@@ -24,14 +25,9 @@ export async function runRefundReview(
   const store = options.store ?? getStore();
 
   // Rate limit: a few requests per email per day.
-  const limit = getPolicy().rateLimits.submissionsPerEmailPerDay;
-  const since = new Date(Date.now() - DAY);
-  if (
-    (await store.countAttempts("submission", request.email, since)) >= limit
-  ) {
+  if (!(await allowSubmission(store, request.email))) {
     return needsInfoDecision("rate_limited");
   }
-  await store.recordAttempt("submission", request.email);
 
   const ctx = newContext({
     store,

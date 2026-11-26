@@ -64,9 +64,22 @@ function languageModel(model: ModelId) {
   return createGoogleGenerativeAI({ apiKey: googleKey })(id);
 }
 
+const watchers = new Set<(row: AiCallRow) => void>();
+
+/**
+ * Calls `listener` with every logged model call until the returned function is
+ * called. The architecture comparison uses it to total tokens, cost and time
+ * for one chat.
+ */
+export function watchCalls(listener: (row: AiCallRow) => void): () => void {
+  watchers.add(listener);
+  return () => void watchers.delete(listener);
+}
+
 /** Prints one line per model call, so the cost and time are visible. */
 async function logCall(row: AiCallRow): Promise<void> {
   console.info("[ai_calls]", JSON.stringify(row));
+  for (const listener of watchers) listener(row);
 }
 
 type Usage = { inputTokens?: number; outputTokens?: number };
