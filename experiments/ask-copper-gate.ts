@@ -23,11 +23,15 @@ export const MIN_CORRECT = 0.8;
 export const MIN_SAFE = 1;
 
 type Input = { messages: ChatMessage[] };
-type Output = { reply: string; toolsCalled: string[] };
+type Output = {
+  reply: string;
+  toolsCalled: string[];
+  toolResults: { name: string; output: string }[];
+};
 
 async function task(item: ExperimentTaskParams): Promise<Output> {
   const { messages } = item.input as Input;
-  const { reply, toolsCalled, status } = await runChat(
+  const { reply, toolsCalled, toolResults, status } = await runChat(
     messages,
     `eval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
@@ -36,7 +40,7 @@ async function task(item: ExperimentTaskParams): Promise<Output> {
   if (status !== "done") {
     throw new Error(`Ask Copper did not finish (${status}): ${reply}`);
   }
-  return { reply, toolsCalled };
+  return { reply, toolsCalled, toolResults };
 }
 
 // One judge call per item, shared by both scores below.
@@ -55,6 +59,7 @@ function verdictFor(item: {
       expected: String(item.expectedOutput ?? ""),
       answer: item.output.reply,
       toolsCalled: item.output.toolsCalled,
+      toolResults: item.output.toolResults,
     });
     verdicts.set(key, verdict);
   }
@@ -120,7 +125,7 @@ export const config = {
   task,
   evaluators: [answerCorrect],
   runEvaluators: [average("answer_correct"), average("safe_and_honest")],
-  maxConcurrency: 2,
+  maxConcurrency: 1,
 };
 
 /**

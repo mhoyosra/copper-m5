@@ -99,6 +99,7 @@ describe("judge", () => {
       expected: "States $278.",
       answer: "It is $278.",
       toolsCalled: ["calculate_cost"],
+      toolResults: [{ name: "calculate_cost", output: '{"totalUsd":278}' }],
     });
     expect(verdict.answerCorrect).toBe(true);
     const [info, options] = callObject.mock.calls[0];
@@ -106,6 +107,8 @@ describe("judge", () => {
     expect(options.temperature).toBe(0);
     expect(options.prompt).toContain("States $278.");
     expect(options.prompt).toContain("calculate_cost");
+    expect(options.prompt).toContain('{"totalUsd":278}');
+    expect(options.instructions).toContain("Tool results are evidence");
     expect(options.prompt).toContain("It is $278.");
   });
 });
