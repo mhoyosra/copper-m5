@@ -178,3 +178,14 @@ run never counts as a pass). The judge is checked against hand-labeled answers
 first (`npm run eval:calibrate`, `evals/judge-calibration.json`, 85% agreement
 needed). `.github/workflows/langfuse-eval.yml` runs the gate on every pull
 request through `langfuse/experiment-action`; `npm run eval:run` runs it locally.
+
+## Single agent vs multi-agent
+
+The shipped design hands refunds from Ask Copper to a Refund Agent. For
+comparison, `ASK_COPPER_ARCH=single` (server-side only) switches Ask Copper to
+one support agent with every tool and no hand-off
+(`lib/copper/refunds/single-agent-tools.ts`,
+`lib/copper/assistant/single-agent-instructions.ts`). `npm run eval:compare`
+runs the golden set and judge against both, and `docs/single-vs-multi-agent.md`
+has the results and the recommendation (ship multi-agent; the single agent needs
+its fail-closed finish step, `ASK_COPPER_SAFETY_NET`).

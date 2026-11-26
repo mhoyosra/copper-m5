@@ -54,6 +54,25 @@ export function newContext(args: {
 }
 
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+
+/**
+ * The per-email daily limit on refund requests. Returns false when the email
+ * is over it; otherwise counts this request and returns true. Both the Refund
+ * Agent and the single support agent go through here.
+ */
+export async function allowSubmission(
+  store: RefundStore,
+  email: string,
+): Promise<boolean> {
+  const limit = getPolicy().rateLimits.submissionsPerEmailPerDay;
+  const since = new Date(Date.now() - DAY);
+  if ((await store.countAttempts("submission", email, since)) >= limit) {
+    return false;
+  }
+  await store.recordAttempt("submission", email);
+  return true;
+}
 
 /**
  * Finds the order by id AND email. A wrong id and a wrong email look the same,
@@ -67,7 +86,7 @@ export async function findOrder(
   const failures = await store.countAttempts(
     "failed_lookup",
     args.chatId,
-    new Date(Date.now() - 24 * HOUR),
+    new Date(Date.now() - DAY),
   );
   if (failures >= limit) return { found: false, blocked: true };
   const order = await store.getOrder(args.orderId, args.email);

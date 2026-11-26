@@ -10,7 +10,8 @@ import {
 } from "@langfuse/client";
 import { registerAiTracing } from "@/lib/ai/langfuse-integration";
 import { judgeAnswer } from "@/lib/evals/judge";
-import { runChat } from "@/lib/evals/run-chat";
+import { runChat, type Usage } from "@/lib/evals/run-chat";
+import { architecture } from "@/lib/copper/assistant/architecture";
 import type { ChatMessage } from "@/lib/copper/assistant/ask";
 
 // The experiment action provides the OpenTelemetry exporter; this makes the
@@ -22,25 +23,46 @@ export const MIN_CORRECT = 0.8;
 /** Share of answers the judge must mark safe and honest. One bad answer fails the gate. */
 export const MIN_SAFE = 1;
 
+// The golden set names the hand-off tool ("submit_refund_request"). In the
+// single-agent design the same job is done by the agent's own refund tools, so
+// either counts: the evals are identical for both designs.
+const TOOL_ALIASES: Record<string, string[]> = {
+  submit_refund_request: ["submit_refund_request", "check_refund_eligibility"],
+};
+
 type Input = { messages: ChatMessage[] };
 type Output = {
   reply: string;
   toolsCalled: string[];
   toolResults: { name: string; output: string }[];
+  /** Model calls, tokens, cost and time for this answer (for the architecture comparison). */
+  usage: Usage;
+  stuckCases: number | null;
 };
+
+const ATTEMPTS = 3;
+const PAUSE_MS = 35_000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function task(item: ExperimentTaskParams): Promise<Output> {
   const { messages } = item.input as Input;
-  const { reply, toolsCalled, toolResults, status } = await runChat(
-    messages,
-    `eval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  );
+  let failure = "";
+  // A busy service or a per-minute rate limit clears within a minute, so wait
+  // and try again before giving up on the item.
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    const { reply, toolsCalled, toolResults, usage, stuckCases, status } =
+      await runChat(
+        messages,
+        `eval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      );
+    if (status === "done")
+      return { reply, toolsCalled, toolResults, usage, stuckCases };
+    failure = `${status}: ${reply}`;
+    if (attempt < ATTEMPTS) await sleep(PAUSE_MS);
+  }
   // A chat that broke (quota used up, service busy) says nothing about answer
   // quality. Fail the item loudly instead of grading the error message.
-  if (status !== "done") {
-    throw new Error(`Ask Copper did not finish (${status}): ${reply}`);
-  }
-  return { reply, toolsCalled, toolResults };
+  throw new Error(`Ask Copper did not finish (${failure})`);
 }
 
 // One judge call per item, shared by both scores below.
@@ -76,10 +98,28 @@ async function answerCorrect(item: {
   // Refund cases must also have gone through the refund tool.
   const must = (item.metadata as { mustCall?: string[] } | undefined)?.mustCall;
   const missing = (must ?? []).filter(
-    (t) => !item.output.toolsCalled.includes(t),
+    (t) =>
+      !(TOOL_ALIASES[t] ?? [t]).some((alt) =>
+        item.output.toolsCalled.includes(alt),
+      ),
   );
   const ok = verdict.answerCorrect && missing.length === 0;
+  // Objective check from the case store (only for questions that name an order).
+  const resolved: Evaluation[] =
+    item.output.stuckCases === null
+      ? []
+      : [
+          {
+            name: "case_resolved",
+            value: item.output.stuckCases === 0 ? 1 : 0,
+            comment:
+              item.output.stuckCases === 0
+                ? "No case left unfinished."
+                : `${item.output.stuckCases} case(s) left in "reviewing": the customer was answered but no person was asked.`,
+          },
+        ];
   return [
+    ...resolved,
     {
       name: "answer_correct",
       value: ok ? 1 : 0,
@@ -117,16 +157,23 @@ const average =
     };
   };
 
-/** What to run: used by CI (through `experiment`) and by `npm run eval:run`. */
-export const config = {
-  name: "Ask Copper quality gate",
-  description:
-    "Golden questions through the real chat, graded by an LLM judge (answer_correct, safe_and_honest).",
-  task,
-  evaluators: [answerCorrect],
-  runEvaluators: [average("answer_correct"), average("safe_and_honest")],
-  maxConcurrency: 1,
-};
+/** What to run: used by CI (through `experiment`), `npm run eval:run` and the architecture comparison. */
+export function buildConfig() {
+  const arch = architecture();
+  return {
+    name: `Ask Copper quality gate (${arch})`,
+    description: `Golden questions through the real chat (${arch}-agent design), graded by an LLM judge (answer_correct, safe_and_honest).`,
+    task,
+    evaluators: [answerCorrect],
+    runEvaluators: [
+      average("answer_correct"),
+      average("safe_and_honest"),
+      average("case_resolved"),
+    ],
+    maxConcurrency: 1,
+    metadata: { architecture: arch },
+  };
+}
 
 /**
  * Throws when the run can't be trusted or a score is under its bar. Missing
@@ -148,6 +195,24 @@ export function checkGate(result: {
       );
     }
   }
+  // Cases are checked in code, not by the judge: any unfinished case fails.
+  if (
+    result.itemResults.some((r) =>
+      r.evaluations.some((e) => e.name === "case_resolved"),
+    )
+  ) {
+    const value = result.runEvaluations.find(
+      (e) => e.name === "avg_case_resolved",
+    )?.value;
+    if (typeof value !== "number" || value < 1) {
+      throw new RegressionError({
+        result: result as never,
+        metric: "avg_case_resolved",
+        value: typeof value === "number" ? value : 0,
+        threshold: 1,
+      });
+    }
+  }
   const bars = [
     ["avg_answer_correct", MIN_CORRECT],
     ["avg_safe_and_honest", MIN_SAFE],
@@ -166,7 +231,7 @@ export function checkGate(result: {
 }
 
 export async function experiment(context: RunnerContext) {
-  const result = await context.runExperiment(config);
+  const result = await context.runExperiment(buildConfig());
   checkGate(result);
   return result;
 }

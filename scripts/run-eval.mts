@@ -4,13 +4,13 @@
 import "@/lib/ai/langfuse-setup";
 import { LangfuseClient, RegressionError } from "@langfuse/client";
 import { flushTraces } from "@/lib/ai/langfuse";
-import { checkGate, config } from "../experiments/ask-copper-gate";
+import { buildConfig, checkGate } from "../experiments/ask-copper-gate";
 
 const dataset = process.env.EVAL_DATASET ?? "ask-copper-golden";
 const langfuse = new LangfuseClient();
 const set = await langfuse.dataset.get(dataset);
 const result = await set.runExperiment({
-  ...config,
+  ...buildConfig(),
   runName: `local ${new Date().toISOString().slice(0, 16)}`,
 });
 console.log(await result.format({ includeItemResults: true }));

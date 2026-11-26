@@ -7,6 +7,12 @@ name: Ask Copper quality gate
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      architecture:
+        description: "Which design to grade: multi (Refund Agent hand-off) or single (one agent, all tools)"
+        type: choice
+        options: [multi, single]
+        default: multi
 
 permissions:
   contents: read
@@ -39,6 +45,7 @@ jobs:
           AI_MODEL: ${{ vars.AI_MODEL }}
           JUDGE_MODEL: ${{ vars.JUDGE_MODEL }}
           LANGFUSE_TRACING_ENVIRONMENT: ci
+          ASK_COPPER_ARCH: ${{ inputs.architecture || vars.ASK_COPPER_ARCH || 'multi' }}
         with:
           langfuse_public_key: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           langfuse_secret_key: ${{ secrets.LANGFUSE_SECRET_KEY }}

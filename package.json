@@ -20,7 +20,8 @@
     "check-supabase": "tsx --env-file=.env.local scripts/check-supabase.ts",
     "eval:seed": "tsx --env-file=.env.local scripts/seed-golden-set.mts",
     "eval:calibrate": "tsx --env-file=.env.local scripts/calibrate-judge.mts",
-    "eval:run": "tsx --env-file=.env.local scripts/run-eval.mts"
+    "eval:run": "tsx --env-file=.env.local scripts/run-eval.mts",
+    "eval:compare": "tsx --env-file=.env.local scripts/compare-architectures.mts"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.93",

@@ -141,7 +141,10 @@ export async function issueRefund(
   if (!c.policyEligible || !c.lineId || c.amountUsd === null) {
     return { ok: false, reason: "not_refundable" };
   }
-  if (actor === "refund-agent" && !c.autoApproved) {
+  // Only a person (the console) may approve a case the limit sent to review.
+  // Written as "anyone but the console" so a new kind of agent is limited by
+  // default, not trusted by default.
+  if (actor !== "console" && !c.autoApproved) {
     return { ok: false, reason: "needs_a_person" };
   }
 

@@ -2,6 +2,7 @@
 // makes, the verdict the rules engine returns, the case record, and the
 // decision Ask Copper relays. The contract is in specs/module-4/spec.md.
 import { z } from "zod";
+import type { Actor } from "@/lib/copper/refunds/actor";
 
 export const ITEMS = ["copper-home", "copper-notes", "copper-plus"] as const;
 export type ItemId = (typeof ITEMS)[number];
@@ -109,7 +110,7 @@ export type RefundCase = {
   customerMessage: string;
   summary: string | null;
   requestedAt: string;
-  decidedBy: "refund-agent" | "console" | null;
+  decidedBy: Actor | null;
   decidedAt: string | null;
   note: string | null;
 };
@@ -128,7 +129,7 @@ export type RefundDecision = {
 export type CaseEvent = {
   caseId: string;
   at: string;
-  actor: "refund-agent" | "console" | "system";
+  actor: Actor | "system";
   event: string;
   detail: string | null;
 };

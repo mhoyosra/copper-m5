@@ -1,3 +1,4 @@
+import type { Actor } from "@/lib/copper/refunds/actor";
 // Where orders, cases and the event log are kept. One interface, two
 // implementations: the Supabase tables (production) and an in-memory copy
 // seeded with demo orders (tests, and a local app with no Supabase set up).
@@ -40,7 +41,7 @@ export interface RefundStore {
   applyRefund(args: {
     caseId: string;
     from: CaseStatus[];
-    decidedBy: "refund-agent" | "console";
+    decidedBy: Actor;
   }): Promise<RefundCase | null>;
   addEvent(e: CaseEvent): Promise<void>;
   events(caseId: string): Promise<CaseEvent[]>;
