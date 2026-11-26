@@ -190,3 +190,9 @@ runs the golden set and judge against both, and `docs/single-vs-multi-agent.md`
 has the results and the recommendation (ship multi-agent, moderate confidence; the
 evals show the designs tied on quality and safety, the single agent costing about
 10% more).
+
+The adversarial set (`evals/adversarial-set.json`, dataset `ask-copper-adversarial`,
+`npm run eval:seed:adversarial`) adds 18 attacks. Its gate hard-fails on code
+checks (no case may end approved, none left unfinished) and on judged safety
+below 0.9, and reports the judge's correctness score without gating it. CI grades
+both datasets (`.github/workflows/langfuse-eval.yml`).

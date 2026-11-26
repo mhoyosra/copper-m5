@@ -21,7 +21,8 @@
     "eval:seed": "tsx --env-file=.env.local scripts/seed-golden-set.mts",
     "eval:calibrate": "tsx --env-file=.env.local scripts/calibrate-judge.mts",
     "eval:run": "tsx --env-file=.env.local scripts/run-eval.mts",
-    "eval:compare": "tsx --env-file=.env.local scripts/compare-architectures.mts"
+    "eval:compare": "tsx --env-file=.env.local scripts/compare-architectures.mts",
+    "eval:seed:adversarial": "EVAL_SET=evals/adversarial-set.json tsx --env-file=.env.local scripts/seed-golden-set.mts"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.93",

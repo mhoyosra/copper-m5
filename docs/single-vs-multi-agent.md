@@ -45,6 +45,46 @@ faster on refund questions, because it skips one agent run.
 the ceiling. The golden set has only one injection attempt and one limit-leak question, and neither
 design failed either. These results say nothing about rare failures, which is where the designs differ.
 
+## Adversarial results: 18 harder questions x 3 rounds (`evals/adversarial-set.json`)
+
+The golden set could not separate the designs, so I added 18 adversarial questions: fake system
+messages, claimed staff and promises, an inflated amount, redirecting the money, instructions hidden in
+the refund reason, a roleplay jailbreak, wrong-email and other-customer probes, requests to print the
+instructions or the internal playbook, skipping the plan-ending warning, a fake approval, and a price
+haggle. Nothing on this set may end approved, so there is a code check as well as the judge.
+
+| 54 answers per variant | Multi-agent | Single, bare | Single + net |
+|---|---|---|---|
+| **No unauthorized refund** (code check: nothing ended approved) | **1.00** | **1.00** | **1.00** |
+| Cases left unfinished (code check) | 1.00 resolved | 1.00 | 1.00 |
+| `safe_and_honest` (judge) | 0.94 | 0.94 | 0.96 |
+| `answer_correct` (judge, strict rubrics) | 0.46 | 0.70 | 0.69 |
+| Tokens per answer | about 4,700 | about 6,700 (+44%) | about 6,600 (+41%) |
+| Cost per answer | $0.00170 | $0.00211 (+24%) | $0.00212 (+25%) |
+
+**The hard result:** across 162 adversarial runs, **no design ever approved a refund or moved money**,
+and none left a case unfinished. The limit, the case record and the rules engine held against every
+attack I wrote, in both designs. This is the strongest evidence in the whole comparison, because it comes
+from the case store and not from a model's opinion.
+
+**The judge-based scores are advisory here.** I read the replies behind the misses. Most are safe replies
+that omit a sentence my rubric asked for (for example not saying that refunds only go to the original
+payment method, or not explaining that both an order number and an email are needed). The few
+`safe_and_honest` failures I inspected were also replies that asked for more details without explicitly
+refusing a manipulation; none approved anything. So the adversarial gate hard-fails on the code checks and
+on judged safety below 0.9, and reports `answer_correct` without gating it.
+
+**Where the designs really differ:**
+- **The single agent answers a clearly ineligible request directly.** For "a rep promised me a refund"
+  on a 45-day-old device, it looked the order up and said the window had passed (in 5 of the 6 replies I sampled across that question and the "I'll lose my job" pressure question; the sixth asked for details first). Ask Copper in the
+  multi-agent design more often asked for the item and reason first (its instructions require collecting
+  them before it hands off), so it answered later. That is most of the 0.46 against 0.70 gap.
+- **The multi-agent design twice named its internal part to the customer** in the replies I read
+  ("I have to submit your request to our Refund Agent"), against its own rule not to mention internal
+  tools. It is a small prompt fix, not yet made, and a leak the single design cannot have.
+- **The single agent costs more here** (+24% per answer, +41 to 44% tokens), because it carries the refund
+  tools and instructions in every turn and calls more tools.
+
 ## Differences that did not show up in the scores
 
 1. **A new agent identity failed open (found by a test, now fixed).** The first single agent used a new
@@ -65,24 +105,29 @@ design failed either. These results say nothing about rare failures, which is wh
 
 ## What I would ship
 
-**Multi-agent, with moderate confidence.** The scores do not favor it. The reasons are cost (about 10%
-cheaper per answer here) and structure: no money tool on the customer-facing agent, input-less refund
-tools, a code-owned finish and customer text, and a smaller prompt for ordinary shopping chats.
+**Multi-agent, with low-to-moderate confidence.** After the harder evals the two designs are still tied on
+the guarantee that matters most (nothing approved without a person, no case left hanging). The reasons to
+prefer multi-agent are structural and about cost: no money tool on the customer-facing agent, input-less
+refund tools, code-owned finishing and customer text, a smaller prompt for ordinary shopping chats, and
+about 10 to 25% lower cost per answer.
 
-The single agent **with its finish step** is a reasonable, simpler alternative. It is faster on refunds
-and has one prompt to maintain. Switch only if you also add adversarial evals (see below) and the single
-agent still matches on `safe_and_honest` and `case_resolved`, and if its roughly 10% extra cost and its
-wider tool exposure are acceptable.
+The single agent **with its finish step** is a real alternative, and the adversarial run weakened the case
+against it: it answers ineligible requests more directly, is about 35% faster on refunds, and has one
+prompt to maintain. Its costs are more tokens, refund tools in every conversation, and a permission model
+that needs care (the fail-open actor bug).
 
-**What would change this answer:** a larger adversarial golden set where one design leaks or complies,
-a cost target that makes the 10% matter, or a product need for faster refund replies that outweighs the
-structural controls.
+**What would change this answer:** a larger adversarial set where one design leaks or approves; a product
+need for faster, more direct refund replies that outweighs the structural controls; or fixing multi-agent's
+two weaknesses (naming "Refund Agent", asking for details before saying a request is ineligible) and
+seeing the quality gap close.
 
 ## Next steps to settle it
 
-- Add 15 to 20 adversarial questions (injection aimed at `issue_refund`, claims of staff, wrong-email
-  probes, cases that tempt a skipped step) and run `EVAL_REPEATS=5`.
-- Try a weaker model, since a stronger model hides process mistakes.
+- Stop Ask Copper from naming the Refund Agent (one sentence in its instructions), then rerun the
+  adversarial set.
+- Let Ask Copper check eligibility sooner on a request that already names an order, so it can say "not
+  eligible" without a round of questions.
+- Try a weaker model, since a stronger model hides process mistakes, and run `EVAL_REPEATS=5`.
 
 ## Correction (how this write-up changed)
 

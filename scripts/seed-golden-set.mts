@@ -3,7 +3,9 @@
 import { readFileSync } from "node:fs";
 import { LangfuseClient } from "@langfuse/client";
 
-const golden = JSON.parse(readFileSync("evals/golden-set.json", "utf8")) as {
+const golden = JSON.parse(
+  readFileSync(process.env.EVAL_SET ?? "evals/golden-set.json", "utf8"),
+) as {
   dataset: string;
   description: string;
   items: {
