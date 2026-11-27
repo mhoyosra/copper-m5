@@ -35,6 +35,8 @@ export async function runChat(
   usage: Usage;
   /** Cases for the order(s) named in the question that are still "reviewing"; null if no order was named. */
   stuckCases: number | null;
+  /** Cases that ended approved (refunded or awaiting a return). The store is fresh per question, so these are this chat's. */
+  approvedCases: number;
   status: string;
 }> {
   // Total every model call made for this question (the chat agent, and the
@@ -81,6 +83,10 @@ export async function runChat(
         .match(/CSL-\d+/g) ?? [],
     ),
   ];
+  // Money moved, or a return was approved, during this chat.
+  const approvedCases = (
+    await getStore().listCases(["refunded", "awaiting_return"])
+  ).length;
   let stuckCases: number | null = null;
   if (orderIds.length > 0) {
     const store = getStore();
@@ -93,6 +99,7 @@ export async function runChat(
   return {
     usage,
     stuckCases,
+    approvedCases,
     reply: last.reply,
     status: last.status,
     toolsCalled: toolCallsOf(last).map((call) => call.name),
